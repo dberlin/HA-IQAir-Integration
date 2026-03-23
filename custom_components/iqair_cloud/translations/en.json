@@ -15,20 +15,42 @@
         "data": {
           "auth_token": "Cloud API Auth Token"
         }
+      },
+      "select_devices": {
+        "title": "Select Devices",
+        "description": "Choose which IQAir devices to set up in Home Assistant.",
+        "data": {
+          "device_ids": "Devices"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Your IQAir credentials have expired. Please re-authenticate.",
+        "menu_options": {
+          "reauth_credentials": "Email and Password",
+          "reauth_tokens": "Manual Tokens"
+        }
+      },
+      "reauth_credentials": {
+        "title": "Re-authenticate with Email",
+        "description": "Enter your IQAir email and password to refresh your credentials."
+      },
+      "reauth_tokens": {
+        "title": "Re-authenticate with Tokens",
+        "description": "Enter updated tokens to refresh your credentials."
       }
+    },
+    "abort": {
+      "reauth_successful": "Re-authentication successful"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Device Configuration",
-        "description": "Configure the API connection settings for your IQAir device.",
+        "title": "Device Selection",
+        "description": "Select which IQAir devices to include in Home Assistant.",
         "data": {
-          "service_select": "API Service",
-          "custom_service": "Custom Service Endpoint (e.g. grpc.ui2.v1.UI2Service)",
-          "prefix_select": "Device Serial Prefix",
-          "custom_prefix": "Custom Serial Prefix (e.g. UI2)",
-          "update_credentials": "Re-authenticate (Clean Login Tokens)"
+          "device_ids": "Devices"
         }
       }
     }
