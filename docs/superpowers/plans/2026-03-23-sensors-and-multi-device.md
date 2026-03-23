@@ -161,6 +161,9 @@ In the standalone function `async_get_cloud_api_auth_token`, `httpx.Response.tex
 Change `html_content = await response.text()` to `html_content = response.text`
 Change `js_content = await response.text()` to `js_content = response.text`
 
+Also fix the same class of bug in `async_signin`:
+Change `return await response.json()` to `return response.json()`
+
 - [ ] **Step 5: Verify syntax**
 
 Run: `python3 -c "import ast; ast.parse(open('custom_components/iqair_cloud/api.py').read()); print('OK')"`
@@ -1852,6 +1855,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
         """Handle re-authentication."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Show re-auth menu."""
         return self.async_show_menu(
             step_id="reauth_confirm",
             menu_options=["reauth_credentials", "reauth_tokens"],
