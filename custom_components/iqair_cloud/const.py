@@ -11,10 +11,16 @@ CONF_PASSWORD: Final = "password"
 CONF_LOGIN_TOKEN: Final = "login_token"
 CONF_USER_ID: Final = "user_id"
 CONF_AUTH_TOKEN: Final = "auth_token"
+# Deprecated: used for v1→v2 migration only
 CONF_DEVICE_ID: Final = "device_id"
+# Deprecated: used for v1→v2 migration only
 CONF_SERIAL_NUMBER: Final = "serial_number"
+# Deprecated: used for v1→v2 migration only
 CONF_API_ENDPOINT: Final = "api_endpoint"
+# Deprecated: used for v1→v2 migration only
 CONF_DEVICE_PREFIX: Final = "device_prefix"
+
+CONF_DEVICE_IDS: Final = "device_ids"  # v2: list of selected device IDs
 
 # --- API Service Choices ---
 API_SERVICE_UI2: Final = "grpc.ui2.v1.UI2Service"
@@ -62,6 +68,12 @@ FIELD_LIGHT_LEVEL: Final = 0x10
 FIELD_AUTO_MODE: Final = 0x10
 FIELD_AUTO_MODE_PROFILE: Final = 0x10
 FIELD_LOCKS: Final = 0x10
+
+# --- Model-to-Service Mapping ---
+MODEL_SERVICE_MAP: Final = {
+    "ui2": {"prefix": "UI2", "endpoint": API_SERVICE_UI2},
+    "klr": {"prefix": "KLR", "endpoint": API_SERVICE_KLR},
+}
 
 # --- Mappings ---
 LIGHT_LEVEL_MAP: Final = {1: "Low", 2: "Medium", 3: "High"}
