@@ -90,26 +90,17 @@ class IQAirApiClient:
         command_client: httpx.AsyncClient,
         state_client: httpx.AsyncClient,
         user_id: str,
-        serial_number: str | None,
-        endpoint: str,
-        device_prefix: str,
     ):
         """Initialize the API client."""
         self._user_id = user_id
         self._command_client = command_client
         self._state_client = state_client
-        self._serial_number = serial_number
-        self._endpoint = endpoint
-        self._device_prefix = device_prefix
 
-    def _build_payload(self, field: int, value: int | None = None) -> str:
+    def _build_payload(self, serial_number: str, device_prefix: str, field: int, value: int | None = None) -> str:
         """Build the gRPC payload."""
-        if not self._serial_number:
-            raise ValueError("Serial number is not set")
-
         # The payload uses the serial number without the prefix (e.g. "UI2_" or "KLR_")
-        prefix = f"{self._device_prefix}_"
-        sn_part = self._serial_number.replace(prefix, "").lower().encode("utf-8")
+        prefix = f"{device_prefix}_"
+        sn_part = serial_number.replace(prefix, "").lower().encode("utf-8")
         payload_bytes = bytearray([0x0A, len(sn_part)]) + sn_part
 
         if value is not None:
@@ -123,10 +114,10 @@ class IQAirApiClient:
         return base64.b64encode(framed_payload).decode("utf-8")
 
     async def _send_command(
-        self, endpoint: str, payload: str, context: str | None = None
+        self, endpoint_service: str, endpoint: str, payload: str, context: str | None = None
     ) -> dict[str, Any] | None:
         """Send a command request to the gRPC API and return the new state."""
-        url = f"{GRPC_API_BASE_URL}{self._endpoint}{endpoint}"
+        url = f"{GRPC_API_BASE_URL}{endpoint_service}{endpoint}"
         context_str = f" ({context})" if context else ""
         try:
             response = await self._command_client.post(url, content=payload)
@@ -190,66 +181,66 @@ class IQAirApiClient:
             return None
 
     async def set_power(
-        self, is_on: bool, context: str | None = None
+        self, is_on: bool, serial_number: str, device_prefix: str, endpoint_service: str, context: str | None = None
     ) -> dict[str, Any] | None:
         """Set the power state of the device."""
         value = 2 if is_on else 3
-        payload = self._build_payload(FIELD_POWER, value)
-        return await self._send_command(ENDPOINT_POWER, payload, context=context)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_POWER, value)
+        return await self._send_command(endpoint_service, ENDPOINT_POWER, payload, context=context)
 
     async def set_fan_speed(
-        self, speed_level: int, context: str | None = None
+        self, speed_level: int, serial_number: str, device_prefix: str, endpoint_service: str, context: str | None = None
     ) -> dict[str, Any] | None:
         """Set the fan speed of the device."""
         if not 1 <= speed_level <= 6:
             _LOGGER.error("Invalid fan speed level: %s", speed_level)
             return None
-        payload = self._build_payload(FIELD_FAN_SPEED, speed_level)
-        return await self._send_command(ENDPOINT_FAN_SPEED, payload, context=context)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_FAN_SPEED, speed_level)
+        return await self._send_command(endpoint_service, ENDPOINT_FAN_SPEED, payload, context=context)
 
     async def set_fan_speed_percent(
-        self, percentage: int, context: str | None = None
+        self, percentage: int, serial_number: str, device_prefix: str, endpoint_service: str, context: str | None = None
     ) -> dict[str, Any] | None:
         """Set the fan speed of the device by percentage."""
         if not 0 <= percentage <= 100:
             _LOGGER.error("Invalid fan speed percentage: %s", percentage)
             return None
-        payload = self._build_payload(FIELD_FAN_SPEED_PERCENT, percentage)
-        return await self._send_command(ENDPOINT_FAN_SPEED, payload, context=context)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_FAN_SPEED_PERCENT, percentage)
+        return await self._send_command(endpoint_service, ENDPOINT_FAN_SPEED, payload, context=context)
 
-    async def set_light_indicator(self, is_on: bool) -> dict[str, Any] | None:
+    async def set_light_indicator(self, is_on: bool, serial_number: str, device_prefix: str, endpoint_service: str) -> dict[str, Any] | None:
         """Set the light indicator state."""
         value = 1 if is_on else None
-        payload = self._build_payload(FIELD_LIGHT_INDICATOR, value)
-        return await self._send_command(ENDPOINT_LIGHT_INDICATOR, payload)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_LIGHT_INDICATOR, value)
+        return await self._send_command(endpoint_service, ENDPOINT_LIGHT_INDICATOR, payload)
 
-    async def set_light_level(self, level: int) -> dict[str, Any] | None:
+    async def set_light_level(self, level: int, serial_number: str, device_prefix: str, endpoint_service: str) -> dict[str, Any] | None:
         """Set the light brightness level."""
         if level not in [1, 2, 3]:
             _LOGGER.error("Invalid light level: %s", level)
             return None
-        payload = self._build_payload(FIELD_LIGHT_LEVEL, level)
-        return await self._send_command(ENDPOINT_LIGHT_LEVEL, payload)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_LIGHT_LEVEL, level)
+        return await self._send_command(endpoint_service, ENDPOINT_LIGHT_LEVEL, payload)
 
-    async def set_auto_mode(self, is_on: bool) -> dict[str, Any] | None:
+    async def set_auto_mode(self, is_on: bool, serial_number: str, device_prefix: str, endpoint_service: str) -> dict[str, Any] | None:
         """Set the auto mode state."""
         value = 1 if is_on else None
-        payload = self._build_payload(FIELD_AUTO_MODE, value)
-        return await self._send_command(ENDPOINT_AUTO_MODE, payload)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_AUTO_MODE, value)
+        return await self._send_command(endpoint_service, ENDPOINT_AUTO_MODE, payload)
 
-    async def set_auto_mode_profile(self, profile_id: int) -> dict[str, Any] | None:
+    async def set_auto_mode_profile(self, profile_id: int, serial_number: str, device_prefix: str, endpoint_service: str) -> dict[str, Any] | None:
         """Set the auto mode profile."""
         if profile_id not in [1, 2, 3]:
             _LOGGER.error("Invalid auto mode profile ID: %s", profile_id)
             return None
-        payload = self._build_payload(FIELD_AUTO_MODE_PROFILE, profile_id)
-        return await self._send_command(ENDPOINT_AUTO_MODE_PROFILE, payload)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_AUTO_MODE_PROFILE, profile_id)
+        return await self._send_command(endpoint_service, ENDPOINT_AUTO_MODE_PROFILE, payload)
 
-    async def set_lock(self, is_on: bool) -> dict[str, Any] | None:
+    async def set_lock(self, is_on: bool, serial_number: str, device_prefix: str, endpoint_service: str) -> dict[str, Any] | None:
         """Set the control panel lock state."""
         value = 1 if is_on else None
-        payload = self._build_payload(FIELD_LOCKS, value)
-        return await self._send_command(ENDPOINT_LOCKS, payload)
+        payload = self._build_payload(serial_number, device_prefix, FIELD_LOCKS, value)
+        return await self._send_command(endpoint_service, ENDPOINT_LOCKS, payload)
 
     async def async_get_devices(self) -> list[dict[str, Any]]:
         """Fetch all devices from the Web API."""
@@ -289,7 +280,7 @@ async def async_get_cloud_api_auth_token(
         # 1. Fetch the dashboard HTML
         response = await session.get(DASHBOARD_URL)
         response.raise_for_status()
-        html_content = await response.text()
+        html_content = response.text
 
         # 2. Find the main JS file URL
         match = re.search(r'src="(main\.[a-f0-9]+\.js)"', html_content)
@@ -302,7 +293,7 @@ async def async_get_cloud_api_auth_token(
         # 3. Fetch the JS file content
         response = await session.get(js_url)
         response.raise_for_status()
-        js_content = await response.text()
+        js_content = response.text
 
         # 4. Extract the auth token
         match = re.search(r'cloudApiAuthToken:"(Bearer [^"]+)"', js_content)
@@ -327,7 +318,7 @@ async def async_signin(
             WEB_API_SIGNIN_URL, json={"email": email, "password": password}
         )
         response.raise_for_status()
-        return await response.json()
+        return response.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 400:  # Typically invalid credentials
             _LOGGER.error("Sign-in failed: Invalid email or password.")
