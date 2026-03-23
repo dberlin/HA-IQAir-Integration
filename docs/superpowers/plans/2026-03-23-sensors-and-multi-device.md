@@ -211,7 +211,7 @@ class IQAirEntity(CoordinatorEntity[IQAirDataUpdateCoordinator]):
     @property
     def device_data(self) -> dict:
         """Return the device data from the coordinator."""
-        return self.coordinator.data["devices"].get(self._device_id, {})
+        return (self.coordinator.data or {}).get("devices", {}).get(self._device_id, {})
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -1483,7 +1483,7 @@ class IQAirOutdoorSensor(CoordinatorEntity[IQAirDataUpdateCoordinator], SensorEn
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info for the outdoor location."""
-        outdoor = self.coordinator.data.get("outdoor_locations", {}).get(
+        outdoor = (self.coordinator.data or {}).get("outdoor_locations", {}).get(
             self._location_id, {}
         )
         city = outdoor.get("city", "Unknown")
@@ -1496,7 +1496,7 @@ class IQAirOutdoorSensor(CoordinatorEntity[IQAirDataUpdateCoordinator], SensorEn
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
-        outdoor = self.coordinator.data.get("outdoor_locations", {}).get(
+        outdoor = (self.coordinator.data or {}).get("outdoor_locations", {}).get(
             self._location_id, {}
         )
         if not outdoor:
