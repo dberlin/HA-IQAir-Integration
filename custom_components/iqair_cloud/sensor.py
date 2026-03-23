@@ -282,21 +282,16 @@ async def async_setup_entry(
                 )
             )
 
-    # Outdoor sensors — deduplicated by location ID
-    seen_locations: set[str] = set()
-    for device_id in sorted(device_ids):
-        device_data = (coordinator.data or {}).get("devices", {}).get(device_id, {})
-        outdoor = device_data.get("current", {}).get("outdoor", {})
-        location_id = outdoor.get("id")
-        if location_id and location_id not in seen_locations:
-            seen_locations.add(location_id)
-            city = outdoor.get("city", "Unknown")
-            for description in OUTDOOR_SENSOR_TYPES:
-                entities.append(
-                    IQAirOutdoorSensor(
-                        coordinator, location_id, city, description
-                    )
+    # Outdoor sensors — use coordinator's pre-deduplicated outdoor locations
+    outdoor_locations = (coordinator.data or {}).get("outdoor_locations", {})
+    for location_id, outdoor in outdoor_locations.items():
+        city = outdoor.get("city", "Unknown")
+        for description in OUTDOOR_SENSOR_TYPES:
+            entities.append(
+                IQAirOutdoorSensor(
+                    coordinator, location_id, city, description
                 )
+            )
 
     async_add_entities(entities)
 
