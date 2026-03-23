@@ -73,15 +73,18 @@ The old API endpoint and device prefix options are removed — these are now der
 
 ### Re-auth Flow
 
-Re-auth step sequence: `async_step_reauth` → `async_step_reauth_confirm` (new step). This is a dedicated step that presents the credentials or tokens form (same as initial auth), validates them, then calls `hass.config_entries.async_update_entry(config_entry, data={**config_entry.data, **new_tokens})` and `hass.config_entries.async_reload(config_entry.entry_id)`. It does NOT route through `async_step_user` or the device selection step. The completion logic (token update + reload) lives entirely in `async_step_reauth_confirm`.
+Re-auth step sequence: `async_step_reauth` → `async_step_reauth_confirm` (new step). This is a dedicated step that presents the credentials or tokens form (same as initial auth), validates them, then updates the config entry and reloads. It does NOT route through `async_step_user` or the device selection step.
+
+Keys written on re-auth success: `CONF_AUTH_TOKEN`, `CONF_LOGIN_TOKEN`, and `CONF_USER_ID` (all three are refreshed from the sign-in response, even if the user re-authenticates with the same account). The update call: `hass.config_entries.async_update_entry(config_entry, data={**config_entry.data, CONF_AUTH_TOKEN: new_auth_token, CONF_LOGIN_TOKEN: new_login_token, CONF_USER_ID: new_user_id})` followed by `hass.config_entries.async_reload(config_entry.entry_id)`.
 
 ### Config Migration
 
 Implement `async_migrate_entry(hass, config_entry)` in `__init__.py`:
-- If config version is 1 (old format): migrate `CONF_DEVICE_ID` → `CONF_DEVICE_IDS = [CONF_DEVICE_ID]`, remove `CONF_SERIAL_NUMBER`, `CONF_API_ENDPOINT`, `CONF_DEVICE_PREFIX` from config data
-- Update entry version: `hass.config_entries.async_update_entry(config_entry, version=2, data=new_data)`
-- Return `True`
-- Set `ConfigFlow.VERSION = 2`
+- If `config_entry.version == 1`: migrate `CONF_DEVICE_ID` → `CONF_DEVICE_IDS = [CONF_DEVICE_ID]`, remove `CONF_SERIAL_NUMBER`, `CONF_API_ENDPOINT`, `CONF_DEVICE_PREFIX` from config data. Call `hass.config_entries.async_update_entry(config_entry, version=2, data=new_data)`. Return `True`.
+- If `config_entry.version >= 2`: return `True` (already migrated, nothing to do).
+- For any unrecognized version: return `False`.
+- Set `ConfigFlow.VERSION = 2`.
+- `CONF_DEVICE_ID` remains in `const.py` as a deprecated constant — it is needed by the migration code to read the old value. Add a comment marking it as deprecated.
 
 ### Translation Updates
 
@@ -207,7 +210,7 @@ This requires adding `Platform.BINARY_SENSOR` to the platforms list.
 
 Weather Condition enum options: `["Clear sky", "Few clouds", "Scattered clouds", "Broken clouds", "Shower rain", "Rain", "Thunderstorm", "Snow", "Mist"]` (standard weather icon mappings).
 
-Note: The API uses imperial units (`"units.system": "imperial"` in request params). HA will handle unit conversion for display based on user preferences.
+Note: The API uses imperial units (`"units.system": "imperial"` in request params). All unit values must use HA's typed unit enums (`UnitOfTemperature.FAHRENHEIT`, `UnitOfPressure.INHG`, `UnitOfSpeed.MILES_PER_HOUR`) as `native_unit_of_measurement`, not raw strings. HA will handle unit conversion for display based on user preferences. The `WEB_API_PARAMS` constant must remain imperial for these units to be correct.
 
 ## File Changes
 
@@ -215,9 +218,9 @@ Note: The API uses imperial units (`"units.system": "imperial"` in request param
 
 - **`const.py`** — add `CONF_DEVICE_IDS`, sensor key constants, `Platform.SENSOR`, `Platform.BINARY_SENSOR`, model-to-prefix/endpoint mapping
 - **`coordinator.py`** — multi-device data storage keyed by device ID; outdoor dedup tracking with stable source selection; `update_from_command(device_id, update_data)` signature
-- **`config_flow.py`** — multi-select device step in setup and options flows; `VERSION = 2`; config entry unique ID uses `user_id`; re-auth flow updated; old endpoint/prefix options removed
+- **`config_flow.py`** — multi-select device step in setup and options flows; `VERSION = 2`; config entry unique ID uses `user_id`; re-auth flow updated; old endpoint/prefix options removed; `validate_connection` updated to match new `IQAirApiClient` constructor signature
 - **`__init__.py`** — add `SENSOR` and `BINARY_SENSOR` platforms; `async_migrate_entry` for v1→v2 config migration; multi-device setup; API client refactored for per-command serial numbers
-- **`api.py`** — command methods accept `serial_number` and `device_prefix` parameters; `_build_payload` accepts serial number parameter; remove instance-level `_serial_number`
+- **`api.py`** — command methods accept `serial_number` and `device_prefix` parameters; `_build_payload` accepts serial number parameter; remove instance-level `_serial_number`; constructor signature changes (removes `serial_number`, `endpoint`, `device_prefix` params)
 - **`fan.py`** — refactor to create one fan per selected device; inherit from base entity; entity unique ID migration from `{device_id}` to `{device_id}_fan`
 - **`switch.py`** — same refactoring, inherit from base entity
 - **`select.py`** — same refactoring, inherit from base entity
