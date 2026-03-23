@@ -273,14 +273,14 @@ class IQAirApiClient:
 
 
 async def async_get_cloud_api_auth_token(
-    session: httpx.AsyncClient,
+    session,  # aiohttp.ClientSession from HA, not httpx
 ) -> str | None:
     """Fetch the hardcoded cloudApiAuthToken from the dashboard's JS."""
     try:
         # 1. Fetch the dashboard HTML
         response = await session.get(DASHBOARD_URL)
         response.raise_for_status()
-        html_content = response.text
+        html_content = await response.text()
 
         # 2. Find the main JS file URL
         match = re.search(r'src="(main\.[a-f0-9]+\.js)"', html_content)
@@ -293,7 +293,7 @@ async def async_get_cloud_api_auth_token(
         # 3. Fetch the JS file content
         response = await session.get(js_url)
         response.raise_for_status()
-        js_content = response.text
+        js_content = await response.text()
 
         # 4. Extract the auth token
         match = re.search(r'cloudApiAuthToken:"(Bearer [^"]+)"', js_content)
@@ -304,13 +304,13 @@ async def async_get_cloud_api_auth_token(
         # Return only the token part, without "Bearer "
         return match.group(1).replace("Bearer ", "")
 
-    except httpx.RequestError as e:
+    except Exception as e:
         _LOGGER.error("Error fetching IQAir dashboard/JS for auth token: %s", e)
         return None
 
 
 async def async_signin(
-    session: httpx.AsyncClient, email: str, password: str
+    session, email: str, password: str  # session is aiohttp.ClientSession from HA
 ) -> dict[str, Any] | None:
     """Sign in to get user ID and login token."""
     try:
@@ -318,13 +318,7 @@ async def async_signin(
             WEB_API_SIGNIN_URL, json={"email": email, "password": password}
         )
         response.raise_for_status()
-        return response.json()
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 400:  # Typically invalid credentials
-            _LOGGER.error("Sign-in failed: Invalid email or password.")
-        else:
-            _LOGGER.error("Sign-in failed with status %s", e.response.status_code)
-        return None
-    except (httpx.RequestError, ValueError) as e:
+        return await response.json()
+    except Exception as e:
         _LOGGER.error("Error during sign-in: %s", e)
         return None
