@@ -1311,7 +1311,7 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
 
     for device_id in device_ids:
-        device_data = coordinator.data.get("devices", {}).get(device_id, {})
+        device_data = (coordinator.data or {}).get("devices", {}).get(device_id, {})
 
         # Indoor air quality sensors
         for description in INDOOR_SENSOR_TYPES:
@@ -1362,7 +1362,7 @@ async def async_setup_entry(
     # Outdoor sensors — deduplicated by location ID
     seen_locations: set[str] = set()
     for device_id in sorted(device_ids):
-        device_data = coordinator.data.get("devices", {}).get(device_id, {})
+        device_data = (coordinator.data or {}).get("devices", {}).get(device_id, {})
         outdoor = device_data.get("current", {}).get("outdoor", {})
         location_id = outdoor.get("id")
         if location_id and location_id not in seen_locations:
