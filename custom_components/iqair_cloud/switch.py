@@ -11,9 +11,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, CONF_DEVICE_ID
+from .const import DOMAIN, CONF_DEVICE_IDS
 from .api import IQAirApiClient
 from .coordinator import IQAirDataUpdateCoordinator
+from .entity import IQAirEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,20 +58,20 @@ async def async_setup_entry(
         "coordinator"
     ]
     api_client: IQAirApiClient = hass.data[DOMAIN][entry.entry_id]["api_client"]
-    device_id = entry.data[CONF_DEVICE_ID]
+    device_ids = entry.data.get(CONF_DEVICE_IDS, [])
 
     entities = [
-        IQAirSwitch(coordinator, api_client, device_id, entry, description)
+        IQAirSwitch(coordinator, api_client, device_id, description)
+        for device_id in device_ids
         for description in SWITCH_TYPES
     ]
     async_add_entities(entities)
 
 
-class IQAirSwitch(SwitchEntity):
+class IQAirSwitch(IQAirEntity, SwitchEntity):
     """Representation of an IQAir Cloud switch."""
 
     entity_description: IQAirSwitchEntityDescription
-    _attr_has_entity_name = True
     _attr_should_poll = False
 
     def __init__(
@@ -78,32 +79,20 @@ class IQAirSwitch(SwitchEntity):
         coordinator: IQAirDataUpdateCoordinator,
         api_client: IQAirApiClient,
         device_id: str,
-        entry: ConfigEntry,
         description: IQAirSwitchEntityDescription,
     ):
         """Initialize the switch."""
-        self.coordinator = coordinator
+        super().__init__(coordinator, device_id)
         self._api = api_client
-        self._device_id = device_id
         self.entity_description = description
         self._attr_unique_id = f"{device_id}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, self._device_id)},
-            "name": entry.title,
-            "manufacturer": "IQAir",
-        }
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available."""
-        return self.coordinator.last_update_success
 
     @property
     def is_on(self) -> bool | None:
         """Return true if the switch is on."""
-        if not self.available or self.coordinator.data is None:
+        if not self.available or not self.device_data:
             return None
-        return self.coordinator.data.get("remote", {}).get(
+        return self.device_data.get("remote", {}).get(
             self.entity_description.state_key
         )
 
@@ -111,31 +100,54 @@ class IQAirSwitch(SwitchEntity):
         """Turn the switch on."""
         update_data = None
         if self.entity_description.key == "auto_mode":
-            update_data = await self._api.set_auto_mode(True)
+            update_data = await self._api.set_auto_mode(
+                True,
+                serial_number=self._serial_number,
+                device_prefix=self._device_prefix,
+                endpoint_service=self._endpoint_service,
+            )
         elif self.entity_description.key == "control_panel_lock":
-            update_data = await self._api.set_lock(True)
+            update_data = await self._api.set_lock(
+                True,
+                serial_number=self._serial_number,
+                device_prefix=self._device_prefix,
+                endpoint_service=self._endpoint_service,
+            )
         elif self.entity_description.key == "display_light":
-            update_data = await self._api.set_light_indicator(True)
+            update_data = await self._api.set_light_indicator(
+                True,
+                serial_number=self._serial_number,
+                device_prefix=self._device_prefix,
+                endpoint_service=self._endpoint_service,
+            )
 
         if update_data is not None:
-            self.coordinator.update_from_command(update_data)
+            self.coordinator.update_from_command(self._device_id, update_data)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         update_data = None
         if self.entity_description.key == "auto_mode":
-            update_data = await self._api.set_auto_mode(False)
+            update_data = await self._api.set_auto_mode(
+                False,
+                serial_number=self._serial_number,
+                device_prefix=self._device_prefix,
+                endpoint_service=self._endpoint_service,
+            )
         elif self.entity_description.key == "control_panel_lock":
-            update_data = await self._api.set_lock(False)
+            update_data = await self._api.set_lock(
+                False,
+                serial_number=self._serial_number,
+                device_prefix=self._device_prefix,
+                endpoint_service=self._endpoint_service,
+            )
         elif self.entity_description.key == "display_light":
-            update_data = await self._api.set_light_indicator(False)
+            update_data = await self._api.set_light_indicator(
+                False,
+                serial_number=self._serial_number,
+                device_prefix=self._device_prefix,
+                endpoint_service=self._endpoint_service,
+            )
 
         if update_data is not None:
-            self.coordinator.update_from_command(update_data)
-
-    async def async_added_to_hass(self) -> None:
-        """When entity is added to hass."""
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
-
+            self.coordinator.update_from_command(self._device_id, update_data)
