@@ -1311,7 +1311,7 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
 
     for device_id in device_ids:
-        device_data = coordinator.data["devices"].get(device_id, {})
+        device_data = coordinator.data.get("devices", {}).get(device_id, {})
 
         # Indoor air quality sensors
         for description in INDOOR_SENSOR_TYPES:
@@ -1362,7 +1362,7 @@ async def async_setup_entry(
     # Outdoor sensors — deduplicated by location ID
     seen_locations: set[str] = set()
     for device_id in sorted(device_ids):
-        device_data = coordinator.data["devices"].get(device_id, {})
+        device_data = coordinator.data.get("devices", {}).get(device_id, {})
         outdoor = device_data.get("current", {}).get("outdoor", {})
         location_id = outdoor.get("id")
         if location_id and location_id not in seen_locations:
@@ -1704,24 +1704,36 @@ def _build_device_selector(devices: list[dict[str, Any]]) -> SelectSelector:
     )
 
 
-async def _do_auth_credentials(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str, Any] | None:
-    """Perform credentials-based authentication. Returns tokens dict or None."""
+class AuthResult:
+    """Result of an authentication attempt."""
+
+    def __init__(self, tokens: dict[str, Any] | None = None, error: str = "invalid_auth"):
+        self.tokens = tokens
+        self.error = error
+
+    @property
+    def success(self) -> bool:
+        return self.tokens is not None
+
+
+async def _do_auth_credentials(hass: HomeAssistant, user_input: dict[str, Any]) -> AuthResult:
+    """Perform credentials-based authentication."""
     session = async_get_clientsession(hass)
     signin_data = await async_signin(
         session, user_input[CONF_EMAIL], user_input[CONF_PASSWORD]
     )
     if not signin_data:
-        return None
+        return AuthResult(error="invalid_auth")
 
     auth_token = await async_get_cloud_api_auth_token(session)
     if not auth_token:
-        return None
+        return AuthResult(error="cannot_connect")
 
-    return {
+    return AuthResult(tokens={
         CONF_LOGIN_TOKEN: signin_data["loginToken"],
         CONF_USER_ID: signin_data["id"],
         CONF_AUTH_TOKEN: auth_token,
-    }
+    })
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -1754,11 +1766,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the email and password step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            tokens = await _do_auth_credentials(self.hass, user_input)
-            if not tokens:
-                errors["base"] = "invalid_auth"
+            result = await _do_auth_credentials(self.hass, user_input)
+            if not result.success:
+                errors["base"] = result.error
             else:
-                self._user_input.update(tokens)
+                self._user_input.update(result.tokens)
                 try:
                     self._devices = await validate_connection(
                         self.hass,
@@ -1823,7 +1835,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the device selection step (multi-select)."""
         if user_input is not None:
-            selected_ids = user_input[CONF_DEVICE_IDS]
+            selected_ids = user_input.get(CONF_DEVICE_IDS, [])
+            if not selected_ids:
+                return self.async_show_form(
+                    step_id="select_devices",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(CONF_DEVICE_IDS): _build_device_selector(self._devices),
+                        }
+                    ),
+                    errors={"base": "no_devices"},
+                )
 
             # Use user_id as the unique ID for the config entry
             await self.async_set_unique_id(self._user_input[CONF_USER_ID])
@@ -1872,16 +1894,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle re-auth via email and password."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            tokens = await _do_auth_credentials(self.hass, user_input)
-            if not tokens:
-                errors["base"] = "invalid_auth"
+            result = await _do_auth_credentials(self.hass, user_input)
+            if not result.success:
+                errors["base"] = result.error
             else:
                 existing_entry = self.hass.config_entries.async_get_entry(
                     self.context["entry_id"]
                 )
                 self.hass.config_entries.async_update_entry(
                     existing_entry,
-                    data={**existing_entry.data, **tokens},
+                    data={**existing_entry.data, **result.tokens},
                 )
                 await self.hass.config_entries.async_reload(existing_entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
