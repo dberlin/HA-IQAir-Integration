@@ -8,7 +8,6 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import IQAirApiClient
 from .const import (
@@ -16,11 +15,11 @@ from .const import (
     CONF_LOGIN_TOKEN,
     CONF_USER_ID,
     CONF_AUTH_TOKEN,
+    CONF_DEVICE_ID,
+    CONF_DEVICE_IDS,
     CONF_SERIAL_NUMBER,
     CONF_API_ENDPOINT,
     CONF_DEVICE_PREFIX,
-    DEFAULT_API_ENDPOINT,
-    DEFAULT_DEVICE_PREFIX,
     GRPC_API_HEADERS,
 )
 from .coordinator import IQAirDataUpdateCoordinator
@@ -31,7 +30,38 @@ PLATFORMS: list[Platform] = [
     Platform.FAN,
     Platform.SWITCH,
     Platform.SELECT,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
 ]
+
+
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate old config entries to new format."""
+    if config_entry.version == 1:
+        _LOGGER.info("Migrating IQAir config entry from version 1 to 2")
+        new_data = {**config_entry.data}
+
+        # Migrate single device ID to list
+        old_device_id = new_data.pop(CONF_DEVICE_ID, None)
+        new_data.pop(CONF_SERIAL_NUMBER, None)
+        new_data.pop(CONF_API_ENDPOINT, None)
+        new_data.pop(CONF_DEVICE_PREFIX, None)
+
+        if old_device_id:
+            new_data[CONF_DEVICE_IDS] = [old_device_id]
+        else:
+            new_data[CONF_DEVICE_IDS] = []
+
+        hass.config_entries.async_update_entry(
+            config_entry, version=2, data=new_data
+        )
+        _LOGGER.info("Migration to version 2 successful")
+        return True
+
+    if config_entry.version >= 2:
+        return True
+
+    return False
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -40,11 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     login_token = entry.data[CONF_LOGIN_TOKEN]
     user_id = entry.data[CONF_USER_ID]
     auth_token = entry.data[CONF_AUTH_TOKEN]
-    serial_number = entry.data[CONF_SERIAL_NUMBER]
-
-    # Retrieve options or defaults
-    api_endpoint = entry.options.get(CONF_API_ENDPOINT, DEFAULT_API_ENDPOINT)
-    device_prefix = entry.options.get(CONF_DEVICE_PREFIX, DEFAULT_DEVICE_PREFIX)
+    device_ids = entry.data.get(CONF_DEVICE_IDS, [])
 
     def _create_clients() -> tuple[httpx.AsyncClient, httpx.AsyncClient]:
         """Create the httpx clients in a thread-safe way."""
@@ -61,13 +87,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         command_client=command_client,
         state_client=state_client,
         user_id=user_id,
-        serial_number=serial_number,
-        endpoint=api_endpoint,
-        device_prefix=device_prefix,
     )
 
     coordinator = IQAirDataUpdateCoordinator(
-        hass, api=api_client, device_id=entry.data["device_id"]
+        hass, api=api_client, device_ids=device_ids
     )
 
     hass.data[DOMAIN][entry.entry_id] = {
