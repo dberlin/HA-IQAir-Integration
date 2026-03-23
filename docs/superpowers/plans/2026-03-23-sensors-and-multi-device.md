@@ -1430,16 +1430,27 @@ class IQAirFilterSensor(IQAirEntity, SensorEntity):
         self._sensor_type = sensor_type
         self._attr_unique_id = f"{device_id}_filter_{slot}_{sensor_type}"
 
+        self._filter_name_fallback = filter_name
         if sensor_type == "health":
-            self._attr_name = f"{filter_name} Health"
             self._attr_icon = "mdi:air-filter"
             self._attr_native_unit_of_measurement = PERCENTAGE
             self._attr_state_class = SensorStateClass.MEASUREMENT
         else:  # level
-            self._attr_name = f"{filter_name} Level"
             self._attr_icon = "mdi:alert-circle-outline"
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = FILTER_LEVEL_OPTIONS
+
+    @property
+    def name(self) -> str:
+        """Return the name, using live filter medium name when available."""
+        filter_data = self._get_filter_data()
+        if filter_data:
+            mediums = filter_data.get("filterMediums", [])
+            filter_name = mediums[0] if mediums else self._filter_name_fallback
+        else:
+            filter_name = self._filter_name_fallback
+        suffix = "Health" if self._sensor_type == "health" else "Level"
+        return f"{filter_name} {suffix}"
 
     def _get_filter_data(self) -> dict | None:
         """Get the filter data for this slot."""
@@ -1740,8 +1751,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for IQAir Cloud."""
 
     VERSION = 2
-    _user_input: dict[str, Any] = {}
-    _devices: list[dict[str, Any]] = []
+
+    def __init__(self) -> None:
+        """Initialize the config flow."""
+        super().__init__()
+        self._user_input: dict[str, Any] = {}
+        self._devices: list[dict[str, Any]] = []
 
     @staticmethod
     @callback
